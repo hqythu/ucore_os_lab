@@ -170,7 +170,7 @@ si
 ```
 改写Makefile文件
 	debug: $(UCOREIMG)
-		$(V)$(TERMINAL) -e "$(QEMU) -S -s -d in_asm -D $(BINDIR)/q.log -parallel stdio -hda $< -serial null"
+		$(V)$(TERMINAL) -e "$(QEMU) -S -s -d in_asm -D $(BINDIR)/q.log -parallel stdio -hda $< -serial null
 		$(V)sleep 2
 		$(V)$(TERMINAL) -e "gdb -q -tui -x tools/gdbinit"
 ```
