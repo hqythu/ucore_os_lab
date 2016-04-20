@@ -7,15 +7,15 @@ V       := @
 
 # try to infer the correct GCCPREFX
 ifndef GCCPREFIX
-GCCPREFIX := $(shell if i386-ucore-elf-objdump -i 2>&1 | grep '^elf32-i386$$' >/dev/null 2>&1; \
-	then echo 'i386-ucore-elf-'; \
+GCCPREFIX := $(shell if i386-elf-objdump -i 2>&1 | grep '^elf32-i386$$' >/dev/null 2>&1; \
+	then echo 'i386-elf-'; \
 	elif objdump -i 2>&1 | grep 'elf32-i386' >/dev/null 2>&1; \
 	then echo ''; \
 	else echo "***" 1>&2; \
-	echo "*** Error: Couldn't find an i386-ucore-elf version of GCC/binutils." 1>&2; \
-	echo "*** Is the directory with i386-ucore-elf-gcc in your PATH?" 1>&2; \
-	echo "*** If your i386-ucore-elf toolchain is installed with a command" 1>&2; \
-	echo "*** prefix other than 'i386-ucore-elf-', set your GCCPREFIX" 1>&2; \
+	echo "*** Error: Couldn't find an i386-elf version of GCC/binutils." 1>&2; \
+	echo "*** Is the directory with i386-elf-gcc in your PATH?" 1>&2; \
+	echo "*** If your i386-elf toolchain is installed with a command" 1>&2; \
+	echo "*** prefix other than 'i386-elf-', set your GCCPREFIX" 1>&2; \
 	echo "*** environment variable to that prefix and run 'make' again." 1>&2; \
 	echo "*** To turn off this error, run 'gmake GCCPREFIX= ...'." 1>&2; \
 	echo "***" 1>&2; exit 1; fi)
@@ -25,8 +25,8 @@ endif
 ifndef QEMU
 QEMU := $(shell if which qemu-system-i386 > /dev/null; \
 	then echo 'qemu-system-i386'; exit; \
-	elif which i386-ucore-elf-qemu > /dev/null; \
-	then echo 'i386-ucore-elf-qemu'; exit; \
+	elif which i386-elf-qemu > /dev/null; \
+	then echo 'i386-elf-qemu'; exit; \
 	else \
 	echo "***" 1>&2; \
 	echo "*** Error: Couldn't find a working QEMU executable." 1>&2; \
@@ -159,7 +159,7 @@ KINCLUDE	+= kern/debug/ \
 			   kern/fs/swap/ \
 			   kern/fs/vfs/ \
 			   kern/fs/devs/ \
-			   kern/fs/sfs/ 
+			   kern/fs/sfs/
 
 
 KSRCDIR		+= kern/init \
@@ -241,8 +241,16 @@ $(call create_target,ucore.img)
 # create swap.img
 SWAPIMG		:= $(call totarget,swap.img)
 
+UNAME 		:= $(shell uname)
+
+ifeq ($(UNAME), Darwin)
+	BS=1m
+else
+	BS=1M
+endif
+
 $(SWAPIMG):
-	$(V)dd if=/dev/zero of=$@ bs=1M count=128
+	$(V)dd if=/dev/zero of=$@ bs=$(BS) count=128
 
 $(call create_target,swap.img)
 
@@ -296,7 +304,7 @@ TARGETS: $(TARGETS)
 
 .DEFAULT_GOAL := TARGETS
 
-QEMUOPTS = -hda $(UCOREIMG) -drive file=$(SWAPIMG),media=disk,cache=writeback -drive file=$(SFSIMG),media=disk,cache=writeback 
+QEMUOPTS = -hda $(UCOREIMG) -drive file=$(SWAPIMG),media=disk,cache=writeback -drive file=$(SFSIMG),media=disk,cache=writeback
 
 .PHONY: qemu qemu-nox debug debug-nox monitor
 qemu-mon: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
@@ -339,7 +347,7 @@ run-nox-%: build-%
 	$(V)$(QEMU) -serial mon:stdio $(QEMUOPTS) -nographic
 
 build-%: touch
-	$(V)$(MAKE) $(MAKEOPTS) "DEFS+=-DTEST=$*" 
+	$(V)$(MAKE) $(MAKEOPTS) "DEFS+=-DTEST=$*"
 
 script-%: touch
 	$(V)$(MAKE) $(MAKEOPTS) "DEFS+=-DTEST=sh -DTESTSCRIPT=/script/$*"
@@ -378,4 +386,3 @@ handin: packall
 packall: clean
 	@$(RM) -f $(HANDIN)
 	@tar -czf $(HANDIN) `find . -type f -o -type d | grep -v '^\.*$$' | grep -vF '$(HANDIN)'`
-
