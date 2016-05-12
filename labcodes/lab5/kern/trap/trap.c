@@ -226,11 +226,15 @@ trap_dispatch(struct trapframe *tf) {
          * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
          * (3) Too Simple? Yes, I think so!
          */
-        /* LAB5 YOUR CODE */
+        /* LAB5 2012010548 */
         /* you should upate you lab1 code (just add ONE or TWO lines of code):
          *    Every TICK_NUM cycle, you should set current process's current->need_resched = 1
          */
-  
+        ticks ++;
+        if (ticks % TICK_NUM == 0) {
+            assert(current != NULL);
+            current->need_resched = 1;
+        }
         break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();
