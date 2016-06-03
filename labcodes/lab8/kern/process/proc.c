@@ -449,7 +449,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     }
     ret = -E_NO_MEM;
     //LAB4:EXERCISE2 YOUR CODE
-    //LAB8:EXERCISE2 YOUR CODE  HINT:how to copy the fs in parent's proc_struct?
+    //LAB8:EXERCISE2 2012010548  HINT:how to copy the fs in parent's proc_struct?
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -492,7 +492,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto bad_fork_cleanup_proc;
     }
     if (copy_files(clone_flags, proc) != 0) {
-        goto bad_fork_cleanup_kstack;
+        goto bad_fork_cleanup_fs;
     }
     if (copy_mm(clone_flags, proc) != 0) {
         goto bad_fork_cleanup_kstack;
@@ -628,28 +628,34 @@ load_icode(int fd, int argc, char **kargv) {
 
     int ret = -E_NO_MEM;
     struct mm_struct *mm;
+    //(1) create a new mm for current process
     if ((mm = mm_create()) == NULL) {
         goto bad_mm;
     }
+    //(2) create a new PDT, and mm->pgdir= kernel virtual addr of PDT
     if (setup_pgdir(mm) != 0) {
         goto bad_pgdir_cleanup_mm;
     }
-
+    //(3) copy TEXT/DATA section, build BSS parts in binary to memory space of process
     struct Page *page;
-
+    //(3.1) get the file header of the bianry program (ELF format)
     struct elfhdr __elf, *elf = &__elf;
     if ((ret = load_icode_read(fd, elf, sizeof(struct elfhdr), 0)) != 0) {
         goto bad_elf_cleanup_pgdir;
     }
 
+    //(3.3) This program is valid?
     if (elf->e_magic != ELF_MAGIC) {
         ret = -E_INVAL_ELF;
         goto bad_elf_cleanup_pgdir;
     }
-
+    //(3.2) get the entry of the program section headers of the bianry program (ELF format)
     struct proghdr __ph, *ph = &__ph;
     uint32_t vm_flags, perm, phnum;
+
+    struct proghdr *ph_end = ph + elf->e_phnum;
     for (phnum = 0; phnum < elf->e_phnum; phnum ++) {
+        //(3.4) find every program section headers
         off_t phoff = elf->e_phoff + sizeof(struct proghdr) * phnum;
         if ((ret = load_icode_read(fd, ph, sizeof(struct proghdr), phoff)) != 0) {
             goto bad_cleanup_mmap;
@@ -664,6 +670,7 @@ load_icode(int fd, int argc, char **kargv) {
         if (ph->p_filesz == 0) {
             continue ;
         }
+        //(3.5) call mm_map fun to setup the new vma ( ph->p_va, ph->p_memsz)
         vm_flags = 0, perm = PTE_U;
         if (ph->p_flags & ELF_PF_X) vm_flags |= VM_EXEC;
         if (ph->p_flags & ELF_PF_W) vm_flags |= VM_WRITE;
@@ -678,7 +685,9 @@ load_icode(int fd, int argc, char **kargv) {
 
         ret = -E_NO_MEM;
 
+        //(3.6) alloc memory, and  copy the contents of every program section (from, from+end) to process's memory (la, la+end)
         end = ph->p_va + ph->p_filesz;
+        //(3.6.1) copy TEXT/DATA section of bianry program
         while (start < end) {
             if ((page = pgdir_alloc_page(mm->pgdir, la, perm)) == NULL) {
                 ret = -E_NO_MEM;
@@ -693,8 +702,9 @@ load_icode(int fd, int argc, char **kargv) {
             }
             start += size, offset += size;
         }
-        end = ph->p_va + ph->p_memsz;
 
+        //(3.6.2) build BSS section of binary program
+        end = ph->p_va + ph->p_memsz;
         if (start < la) {
             /* ph->p_memsz == ph->p_filesz */
             if (start == end) {
@@ -722,7 +732,8 @@ load_icode(int fd, int argc, char **kargv) {
         }
     }
     sysfile_close(fd);
-
+    
+    //(4) build user stack memory
     vm_flags = VM_READ | VM_WRITE | VM_STACK;
     if ((ret = mm_map(mm, USTACKTOP - USTACKSIZE, USTACKSIZE, vm_flags, NULL)) != 0) {
         goto bad_cleanup_mmap;
@@ -732,6 +743,7 @@ load_icode(int fd, int argc, char **kargv) {
     assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-3*PGSIZE , PTE_USER) != NULL);
     assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-4*PGSIZE , PTE_USER) != NULL);
     
+    //(5) set current process's mm, sr3, and set CR3 reg = physical addr of Page Directory
     mm_count_inc(mm);
     current->mm = mm;
     current->cr3 = PADDR(mm->pgdir);
@@ -754,7 +766,8 @@ load_icode(int fd, int argc, char **kargv) {
     
     stacktop = (uintptr_t)uargv - sizeof(int);
     *(int *)stacktop = argc;
-    
+
+    //(6) setup trapframe for user environment
     struct trapframe *tf = current->tf;
     memset(tf, 0, sizeof(struct trapframe));
     tf->tf_cs = USER_CS;
